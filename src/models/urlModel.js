@@ -11,8 +11,8 @@ const shortenSchema = new mongoose.Schema({
     },
     longUrl :{
         type:String,
-        trim:true,
-        required:true
+        required:true,
+        trim:true
     },
     shortUrl:{
         type:String,
