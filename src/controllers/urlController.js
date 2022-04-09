@@ -29,8 +29,8 @@ const GET_ASYNC = promisify(redisClient.GET).bind(redisClient);
 
 
 const isValid = function (value) {
-    if (typeof value === "undefined" ||  value === null) return false
-    if (typeof value === "string" &&  value.trim().length === 0) return false
+    if (typeof value === "undefined" || value === null) return false
+    if (typeof value === "string" && value.trim().length === 0) return false
     return true;
 }
 
@@ -49,7 +49,6 @@ const createShortenUrl = async function (req, res) {
         if (!isValidRequestBody(requestBody)) {
             return res.status(400).send({ status: false, msg: "No Parameter Passed In RequestBody" })
         }
-        // let checkvalidation = longUrl.trim().length == 0;
         if (!isValid(longUrl)) {
             return res.status(400).send({ status: false, msg: "Long Url is Required" })
         }
@@ -57,33 +56,37 @@ const createShortenUrl = async function (req, res) {
             return res.status(400).send({ status: false, msg: "Not a Valid Url" })
         }
 
-        //unique validation
-        let checkUrl = await urlModel.findOne({ longUrl })
 
-        if (checkUrl) {
-            //if url found getting data from redis with key longUrl 
-            let getUrlFromcache = await GET_ASYNC(`${longUrl}`)
-            let parsedUrl = JSON.parse(getUrlFromcache)
+        //Getting data from redis database with key longUrl 
+        let getUrlFromcache = await GET_ASYNC(`${longUrl}`)
+        let parsedUrl = JSON.parse(getUrlFromcache)
+        if (parsedUrl) {
             // console.log(parsedUrl)
-            return res.status(400).send({ status: false, msg: "LongUrl is already Present", data: parsedUrl })
+            return res.status(201).send({ msg: "LongUrl is Present(Cache)", data: parsedUrl })
         }
+        //If not present in redis
+        if (!parsedUrl) {
+            let checkUrl = await urlModel.findOne({ longUrl })
+            if (checkUrl) {
+                return res.status(201).send({ msg: "LongUrl is already Present(MongoDB)", data: checkUrl })
+            }
+            else {
+                let baseUrl = "http://localhost:3000"
 
-        else {
-            let baseUrl = "http://localhost:3000"
+                //Generating Short Url Using shortId package
+                const urlCode = shortid.generate(longUrl)
 
-            //Generating Short Url Using shortId package
-            const urlCode = shortid.generate(longUrl)
+                //Concating baseUrl and urlCode
+                const shortUrl = baseUrl + "/" + urlCode.toLowerCase()
 
-            //Concating baseUrl and urlCode
-            const shortUrl = baseUrl + "/" + urlCode
+                let saveData = { longUrl, shortUrl, urlCode }
 
-            let saveData = { longUrl, shortUrl, urlCode }
-
-            let createDocument = await urlModel.create(saveData)
-            if (createDocument) {
-                //Setting/Storing newly created url in redis database
-                await SET_ASYNC(`${longUrl}`, JSON.stringify(createDocument))
-                return res.status(201).send({ status: true, msg: "ShortUrl Created Successfully", data: createDocument })
+                let createDocument = await urlModel.create(saveData)
+                if (createDocument) {
+                    //Setting/Storing newly created url in redis database
+                    await SET_ASYNC(`${longUrl}`, JSON.stringify(createDocument))
+                    return res.status(201).send({ status: true, msg: "ShortUrl Created Successfully", data: createDocument })
+                }
             }
         }
     }
@@ -99,7 +102,7 @@ const redirectUrl = async function (req, res) {
     try {
         let urlCode = req.params.urlCode;
 
-        //Geting Url from redis database
+        //Geting Url from redis database(cache)
         let getUrl = await GET_ASYNC(`${urlCode}`)
         let parsedUrl = JSON.parse(getUrl)
 
@@ -111,7 +114,7 @@ const redirectUrl = async function (req, res) {
             if (!setUrl) {
                 return res.status(404).send({ status: false, msg: "No URL Found" })
             }
-            //found url is storing in redis database 
+            //found url is storing in redis database(cache) 
             await SET_ASYNC(`${urlCode}`, JSON.stringify(setUrl))
             return res.status(302).redirect(setUrl.longUrl)
         }
