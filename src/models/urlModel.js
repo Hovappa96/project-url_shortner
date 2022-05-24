@@ -19,6 +19,7 @@ const shortenSchema = new mongoose.Schema({
         trim:true,
         unique:true
     }
+    
 
 },)
 
